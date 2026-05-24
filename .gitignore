@@ -1,0 +1,38 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Data / output (user-generated, do not commit)
+data/*.jsonl
+data/*.json
+data/*.xlsx
+output/
+gepa_output/
+alignment_output/
+*.zip
+
+# Secrets
+*.key
+*.pem
+.env
+
+# OS
+.DS_Store
+Thumbs.db

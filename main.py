@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+main.py — Agent Evaluator 统一入口
+========================================
+根据子命令分发到各模块。
+
+Usage:
+    python main.py phase1  --data-dir /path/to/agentboard_data
+    python main.py run     --input data/agent_traces.jsonl --output output/traces_scored.jsonl
+    python main.py llm     --input output/traces_scored.jsonl --output output/llm_scores.jsonl
+    python main.py hybrid  --rule-input output/traces_scored.jsonl --llm-input output/llm_scores.jsonl --output output/hybrid_scores.jsonl
+    python main.py align   --rule output/traces_scored.jsonl --llm output/llm_scores.jsonl
+    python main.py optimize --input output/hybrid_scores.jsonl --output output/optimized_prompt.json
+"""
+
+import argparse
+import sys
+from pathlib import Path
+
+# 把 src 加入路径
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+
+def main():
+    parser = argparse.ArgumentParser(prog="agent-evaluator")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    # --- phase1 ---
+    p1 = sub.add_parser("phase1", help="Phase 1: AgentBoard 数据预处理")
+    p1.add_argument("--data-dir", default="./agentboard_data", help="原始数据根目录")
+    p1.add_argument("--output-dir", default="./data", help="输出目录")
+
+    # --- run (agent runner) ---
+    pr = sub.add_parser("run", help="运行 Agent 生成轨迹")
+    pr.add_argument("--input", required=True, help="输入 JSONL (含 goal)")
+    pr.add_argument("--output", required=True, help="输出 JSONL (轨迹)")
+    pr.add_argument("--model", default="mock", help="模型名: mock | siliconflow | ...")
+    pr.add_argument("--api-key", default="", help="API Key (硅基流动等)")
+    pr.add_argument("--max-steps", type=int, default=10, help="最大步数")
+
+    # --- rule grade ---
+    pg = sub.add_parser("rule", help="RuleGrader: 8维规则评估")
+    pg.add_argument("--input", required=True, help="输入轨迹 JSONL")
+    pg.add_argument("--output", required=True, help="输出评分 JSONL")
+
+    # --- llm grade ---
+    pl = sub.add_parser("llm", help="LLMGrader: LLM-as-Judge 评估")
+    pl.add_argument("--input", required=True, help="输入轨迹 JSONL")
+    pl.add_argument("--output", required=True, help="输出评分 JSONL")
+    pl.add_argument("--model", default="Qwen/Qwen2.5-14B-Instruct")
+    pl.add_argument("--api-key", default="")
+
+    # --- hybrid ---
+    ph = sub.add_parser("hybrid", help="HybridGrader: 融合评估")
+    ph.add_argument("--rule-input", required=True, help="Rule 评分 JSONL")
+    ph.add_argument("--llm-input", required=True, help="LLM 评分 JSONL")
+    ph.add_argument("--output", required=True, help="输出融合评分 JSONL")
+
+    # --- align ---
+    pa = sub.add_parser("align", help="GraderAligner: Rule vs LLM 对齐分析")
+    pa.add_argument("--rule", required=True)
+    pa.add_argument("--llm", required=True)
+    pa.add_argument("--output-dir", default="./output/alignment")
+
+    # --- optimize (GEPA) ---
+    po = sub.add_parser("optimize", help="GEPA Optimizer: 遗传进化优化 Prompt")
+    po.add_argument("--input", required=True, help="评分结果 JSONL (作为 fitness)")
+    po.add_argument("--output", required=True, help="优化后的 prompt 输出路径")
+    po.add_argument("--generations", type=int, default=5)
+    po.add_argument("--population", type=int, default=6)
+    po.add_argument("--api-key", default="")
+
+    args = parser.parse_args()
+
+    if args.cmd == "phase1":
+        from phase1_preprocess import main as _main
+        _main()
+    elif args.cmd == "run":
+        from agent_runner import main as _main
+        _main()
+    elif args.cmd == "rule":
+        from quick_rule_grade import main as _main
+        _main()
+    elif args.cmd == "llm":
+        from llm_grader import main as _main
+        _main()
+    elif args.cmd == "hybrid":
+        from hybrid_grader import main as _main
+        _main()
+    elif args.cmd == "align":
+        from grader_aligner import main as _main
+        _main()
+    elif args.cmd == "optimize":
+        from gepa_optimizer import main as _main
+        _main()
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()
