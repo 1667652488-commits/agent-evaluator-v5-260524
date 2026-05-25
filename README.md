@@ -29,11 +29,61 @@ export SILICONFLOW_API_KEY="sk-nnksashvwdizsenvqlnlcyhevvzpqntwswvutxcqukzfhkyc"
 # 示例 1: ACEBench Agent 单条演示（展示完整流程）
 python examples/run_acebench_agent_demo.py
 
-# 示例 2: 冷启动评估（5% = 50条）
-python pipeline/scripts/main.py --phase cold_start --dataset ACEBench --ratio 0.05
+# 示例 2: ACEBench 飞轮（分阶段执行）
 
-# 示例 3: 逐轮飞轮（10% 每轮）
-python pipeline/scripts/main.py --phase iteration --dataset ACEBench --ratio 0.10 --rounds 10
+```bash
+# Phase 1: 冷启动（5% 数据跑 Agent + 评估）
+python pipeline/scripts/main.py acebench --phase coldstart --api-key sk-xxx
+
+# Phase 2: 基于冷启动结果生成评估器 + 优化器
+python pipeline/scripts/main.py acebench --phase evalopt
+
+# Phase 3: 逐轮迭代优化（10% × N 轮）
+python pipeline/scripts/main.py acebench --phase iteration --rounds 10
+
+# Phase 4: 汇总所有轮次结果生成报告
+python pipeline/scripts/main.py acebench --phase summary
+
+# 全部一起跑（默认，等价于 --phase all）
+python pipeline/scripts/main.py acebench --api-key sk-xxx
+```
+
+**参数说明：**
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--phase` | 执行阶段: all/coldstart/evalopt/iteration/summary | all |
+| `--ratio` | 冷启动抽样比例 | 0.05 |
+| `--rounds` | 迭代轮数 | 10 |
+| `--iter-ratio` | 每轮迭代抽样比例 | 0.10 |
+| `--model` | 模型名称 | Qwen/Qwen2.5-14B-Instruct |
+| `--api-key` | SiliconFlow API Key | 从环境变量读取 |
+| `--output-dir` | 结果输出目录 | ./results/no_gepa |
+
+**阶段间依赖自动检查：**
+- `evalopt` 会自动查找 `results/no_gepa/phase1_coldstart/results.json`
+- `iteration` 会自动查找 `results/no_gepa/phase2_optimizer/optimized_agent_prompt.txt`
+- `summary` 会自动收集所有 `round_X/summary.json`
+
+### 示例 3: 旧版命令（数据预处理 / AgentBoard）
+
+```bash
+# Phase 1 数据预处理
+python pipeline/scripts/main.py phase1 --data-dir ./agentboard_data
+
+# 运行 Agent 生成轨迹
+python pipeline/scripts/main.py run --input data.jsonl --output traces.jsonl --model siliconflow --api-key sk-xxx
+
+# Rule 评估
+python pipeline/scripts/main.py rule --input traces.jsonl --output scored.jsonl
+
+# LLM 评估
+python pipeline/scripts/main.py llm --input traces.jsonl --output llm_scores.jsonl --api-key sk-xxx
+
+# Hybrid 融合
+python pipeline/scripts/main.py hybrid --rule-input scored.jsonl --llm-input llm_scores.jsonl --output hybrid.jsonl
+
+# GEPA 优化
+python pipeline/scripts/main.py optimize --input hybrid.jsonl --output optimized_prompt.json
 ```
 
 ---
