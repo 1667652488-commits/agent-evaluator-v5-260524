@@ -1,0 +1,55 @@
+{
+  "project": "agent-evaluator",
+  "version": "v5.1",
+  "env": "linux",
+  "datasets": {
+    "default": "agentboard",
+    "available": ["agentboard", "superclue"]
+  },
+  "paths": {
+    "data_preprocessing": "./data_preprocessing",
+    "agent": "./agent",
+    "evaluator": "./evaluator",
+    "optimizer": "./optimizer",
+    "pipeline": "./pipeline"
+  },
+  "api": {
+    "siliconflow": {
+      "base_url": "https://api.siliconflow.cn/v1",
+      "api_key_env": "SILICONFLOW_API_KEY",
+      "default_model": "Qwen/Qwen2.5-14B-Instruct"
+    }
+  },
+  "evaluator": {
+    "gepa": {
+      "enabled": false,
+      "reflection_mode": "rule",
+      "mutation_mode": "rule"
+    },
+    "dimensions": [
+      "goal_understanding",
+      "planning",
+      "tool_selection",
+      "parameter_generation",
+      "execution_accuracy",
+      "reflection",
+      "state_tracking",
+      "termination"
+    ]
+  },
+  "optimizer": {
+    "gepa": {
+      "enabled": false,
+      "generations": 3,
+      "population_size": 5,
+      "elite_size": 2,
+      "max_population": 6,
+      "complexity_penalty": 0.01
+    },
+    "regression_threshold": 1.0
+  },
+  "agent": {
+    "max_steps": 15,
+    "model": "Qwen/Qwen2.5-14B-Instruct"
+  }
+}

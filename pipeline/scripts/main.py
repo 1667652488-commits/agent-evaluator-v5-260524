@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-main.py — Agent Evaluator 统一入口
+main.py — Agent Evaluator 统一入口 (v5.1)
 ========================================
 根据子命令分发到各模块。
 
 Usage:
-    python main.py phase1  --data-dir /path/to/agentboard_data
-    python main.py run     --input data/agent_traces.jsonl --output output/traces_scored.jsonl
-    python main.py llm     --input output/traces_scored.jsonl --output output/llm_scores.jsonl
-    python main.py hybrid  --rule-input output/traces_scored.jsonl --llm-input output/llm_scores.jsonl --output output/hybrid_scores.jsonl
-    python main.py align   --rule output/traces_scored.jsonl --llm output/llm_scores.jsonl
-    python main.py optimize --input output/hybrid_scores.jsonl --output output/optimized_prompt.json
+    python pipeline/scripts/main.py phase1  --data-dir /path/to/agentboard_data
+    python pipeline/scripts/main.py run     --input data/agent_traces.jsonl --output output/traces_scored.jsonl
+    python pipeline/scripts/main.py llm     --input output/traces_scored.jsonl --output output/llm_scores.jsonl
+    python pipeline/scripts/main.py hybrid  --rule-input output/traces_scored.jsonl --llm-input output/llm_scores.jsonl --output output/hybrid_scores.jsonl
+    python pipeline/scripts/main.py align   --rule output/traces_scored.jsonl --llm output/llm_scores.jsonl
+    python pipeline/scripts/main.py optimize --input output/hybrid_scores.jsonl --output output/optimized_prompt.json
 """
 
 import argparse
 import sys
 from pathlib import Path
 
-# 把 src 加入路径
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+# 项目根目录
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 
 
 def main():
@@ -74,25 +75,25 @@ def main():
     args = parser.parse_args()
 
     if args.cmd == "phase1":
-        from phase1_preprocess import main as _main
+        from data_preprocessing.scripts.phase1_preprocess import main as _main
         _main()
     elif args.cmd == "run":
-        from agent_runner import main as _main
+        from agent.models.agent_runner import main as _main
         _main()
     elif args.cmd == "rule":
-        from quick_rule_grade import main as _main
+        from evaluator.dev.scripts.quick_rule_grade import main as _main
         _main()
     elif args.cmd == "llm":
-        from llm_grader import main as _main
+        from evaluator.dev.scripts.llm_grader import main as _main
         _main()
     elif args.cmd == "hybrid":
-        from hybrid_grader import main as _main
+        from evaluator.dev.scripts.hybrid_grader import main as _main
         _main()
     elif args.cmd == "align":
-        from grader_aligner import main as _main
+        from evaluator.dev.scripts.grader_aligner import main as _main
         _main()
     elif args.cmd == "optimize":
-        from gepa_optimizer import main as _main
+        from optimizer.dev.scripts.gepa_optimizer import main as _main
         _main()
     else:
         parser.print_help()
