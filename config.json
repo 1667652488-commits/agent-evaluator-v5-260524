@@ -4,7 +4,22 @@
   "env": "linux",
   "datasets": {
     "default": "agentboard",
-    "available": ["agentboard", "superclue"]
+    "available": ["agentboard", "superclue", "general-functioncall-test"],
+    "agentboard": {
+      "data_dir": "data_preprocessing/raw_datasets/agentboard",
+      "description": "AgentBoard: 345条多维度Agent评测数据"
+    },
+    "superclue": {
+      "samples": "data_preprocessing/raw_datasets/superclue/superclue_agent_samples.jsonl",
+      "description": "SuperCLUE-Agent: 中文Agent评测数据（10条示例）"
+    },
+    "general-functioncall-test": {
+      "test": "data_preprocessing/raw_datasets/GeneralFunctionCall-Test/test.jsonl",
+      "description": "GeneralFunctionCall-Test: 2000条 Function Calling 评测数据，评估工具触发决策 + 参数 Schema 准确性",
+      "metrics": ["tool_call_f1", "schema_accuracy", "count_finish_reason_tool_call", "count_successful_tool_call"],
+      "language": "zh/en",
+      "source": "evalscope/GeneralFunctionCall-Test (ModelScope)"
+    }
   },
   "paths": {
     "data_preprocessing": "./data_preprocessing",
@@ -18,6 +33,10 @@
       "base_url": "https://api.siliconflow.cn/v1",
       "api_key_env": "SILICONFLOW_API_KEY",
       "default_model": "Qwen/Qwen2.5-14B-Instruct"
+    },
+    "modelscope": {
+      "base_url": "https://www.modelscope.cn",
+      "description": "国内模型和数据集下载平台"
     }
   },
   "evaluator": {
