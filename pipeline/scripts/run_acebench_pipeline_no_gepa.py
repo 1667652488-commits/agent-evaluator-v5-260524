@@ -792,31 +792,133 @@ def generate_summary_report(coldstart_summary, round_results):
 # ---------------------------------------------------------------------------
 
 def main():
+    # 读取环境变量（由 main.py acebench 子命令设置）
+    phase = os.environ.get("ACEBENCH_PHASE", "all")
+    rounds = int(os.environ.get("ACEBENCH_ROUNDS", "10"))
+    iter_ratio = float(os.environ.get("ACEBENCH_ITER_RATIO", "0.10"))
+    output_dir_env = os.environ.get("ACEBENCH_OUTPUT_DIR", "")
+    coldstart_results_env = os.environ.get("ACEBENCH_COLDSTART_RESULTS", "")
+    
+    global RESULTS_DIR
+    if output_dir_env:
+        RESULTS_DIR = Path(output_dir_env)
+        RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    
     print("=" * 70)
-    print("ACEBench 飞轮执行（不开启 GEPA）")
+    print(f"ACEBench 飞轮执行（Phase: {phase} | GEPA: 关闭）")
     print("=" * 70)
     print(f"模型: {MODEL}")
     print(f"结果目录: {RESULTS_DIR}")
+    print(f"指定阶段: {phase}")
     
-    # 加载数据
+    # 统一加载数据
     print("\n加载数据集...")
     datasets, gt_files = load_all_datasets()
     
-    # Phase 1: 冷启动
-    coldstart_results, coldstart_summary = run_cold_start(datasets, gt_files, ratio=0.05)
+    # 阶段分发
+    if phase == "coldstart":
+        # Phase 1: 仅冷启动
+        print("\n>>> 执行 Phase 1: 冷启动")
+        coldstart_results, coldstart_summary = run_cold_start(datasets, gt_files, ratio=0.05)
+        print("\n冷启动完成。如需继续 Phase 2，执行:")
+        print(f"  python pipeline/scripts/main.py acebench --phase evalopt --coldstart-results {RESULTS_DIR / 'phase1_coldstart' / 'results.json'}")
+        
+    elif phase == "evalopt":
+        # Phase 2: 生成评估器 + 优化器（需要 Phase 1 结果）
+        print("\n>>> 执行 Phase 2: 生成评估器 + 优化器")
+        coldstart_path = Path(coldstart_results_env) if coldstart_results_env else (RESULTS_DIR / "phase1_coldstart" / "results.json")
+        if not coldstart_path.exists():
+            print(f"  错误: 找不到冷启动结果文件: {coldstart_path}")
+            print("  请先执行: python pipeline/scripts/main.py acebench --phase coldstart")
+            return
+        
+        with open(coldstart_path, "r", encoding="utf-8") as f:
+            coldstart_results = json.load(f)
+        
+        # 重建 summary
+        pass_count = sum(1 for r in coldstart_results if r["evaluation"]["status"] == "pass")
+        partial_count = sum(1 for r in coldstart_results if r["evaluation"]["status"] == "partial")
+        fail_count = sum(1 for r in coldstart_results if r["evaluation"]["status"] == "fail")
+        total = len(coldstart_results)
+        coldstart_summary = {
+            "total": total,
+            "pass": pass_count,
+            "partial": partial_count,
+            "fail": fail_count,
+            "pass_rate": pass_count / total if total > 0 else 0,
+            "avg_score": sum(r["evaluation"]["score"] for r in coldstart_results) / total if total > 0 else 0
+        }
+        
+        evaluator_config, optimizer_config, optimized_prompt = generate_evaluator(coldstart_results, coldstart_summary)
+        print("\n评估器+优化器生成完成。如需继续 Phase 3，执行:")
+        print(f"  python pipeline/scripts/main.py acebench --phase iteration")
+        
+    elif phase == "iteration":
+        # Phase 3: 逐轮迭代（需要 Phase 2 结果）
+        print(f"\n>>> 执行 Phase 3: 逐轮迭代 ({rounds} 轮)")
+        opt_prompt_path = RESULTS_DIR / "phase2_optimizer" / "optimized_agent_prompt.txt"
+        if not opt_prompt_path.exists():
+            print(f"  错误: 找不到优化后 prompt: {opt_prompt_path}")
+            print("  请先执行: python pipeline/scripts/main.py acebench --phase evalopt")
+            return
+        
+        with open(opt_prompt_path, "r", encoding="utf-8") as f:
+            optimized_prompt = f.read()
+        
+        round_results = run_iteration(datasets, gt_files, optimized_prompt, rounds=rounds, ratio=iter_ratio)
+        print("\n逐轮迭代完成。如需汇总，执行:")
+        print(f"  python pipeline/scripts/main.py acebench --phase summary")
+        
+    elif phase == "summary":
+        # Phase 4: 汇总报告
+        print("\n>>> 执行 Phase 4: 汇总报告")
+        coldstart_summary_path = RESULTS_DIR / "phase1_coldstart" / "summary.json"
+        if not coldstart_summary_path.exists():
+            print(f"  错误: 找不到冷启动汇总: {coldstart_summary_path}")
+            return
+        
+        with open(coldstart_summary_path, "r", encoding="utf-8") as f:
+            coldstart_summary = json.load(f)
+        
+        # 收集所有轮次结果
+        round_results = []
+        round_idx = 1
+        while True:
+            round_summary_path = RESULTS_DIR / "phase3_iteration" / f"round_{round_idx}" / "summary.json"
+            if not round_summary_path.exists():
+                break
+            with open(round_summary_path, "r", encoding="utf-8") as f:
+                round_results.append(json.load(f))
+            round_idx += 1
+        
+        report = generate_summary_report(coldstart_summary, round_results)
+        print("\n汇总报告完成")
+        
+    else:  # phase == "all"
+        # 全部执行
+        print("\n>>> 执行全部阶段 (Phase 1 → 2 → 3 → 4)")
+        
+        # Phase 1: 冷启动
+        coldstart_results, coldstart_summary = run_cold_start(datasets, gt_files, ratio=0.05)
+        
+        # Phase 2: 生成评估器 + 优化器
+        evaluator_config, optimizer_config, optimized_prompt = generate_evaluator(coldstart_results, coldstart_summary)
+        
+        # Phase 3: 逐轮迭代
+        round_results = run_iteration(datasets, gt_files, optimized_prompt, rounds=rounds, ratio=iter_ratio)
+        
+        # Phase 4: 汇总
+        report = generate_summary_report(coldstart_summary, round_results)
+        
+        print("\n" + "=" * 70)
+        print("飞轮全部执行完毕!")
+        print("=" * 70)
     
-    # Phase 2: 生成评估器 + 优化器
-    evaluator_config, optimizer_config, optimized_prompt = generate_evaluator(coldstart_results, coldstart_summary)
-    
-    # Phase 3: 逐轮迭代
-    round_results = run_iteration(datasets, gt_files, optimized_prompt, rounds=10, ratio=0.10)
-    
-    # 汇总
-    report = generate_summary_report(coldstart_summary, round_results)
-    
-    print("\n" + "=" * 70)
-    print("飞轮执行完毕!")
-    print("=" * 70)
+    print(f"\n所有结果保存在: {RESULTS_DIR}")
+    print("目录结构:")
+    for p in sorted(RESULTS_DIR.rglob("*")):
+        rel = p.relative_to(RESULTS_DIR)
+        print(f"  {rel}")
     print(f"所有结果保存在: {RESULTS_DIR}")
     print("目录结构:")
     for p in sorted(RESULTS_DIR.rglob("*")):

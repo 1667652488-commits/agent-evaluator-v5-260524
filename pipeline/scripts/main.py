@@ -74,6 +74,7 @@ def main():
 
 # --- acebench (ACEBench cold-start + iteration pipeline) ---
     p_ac = sub.add_parser("acebench", help="ACEBench 飞轮: 冷启动→评估器→优化器→逐轮迭代")
+    p_ac.add_argument("--phase", default="all", choices=["all", "coldstart", "evalopt", "iteration", "summary"], help="执行阶段: all=全部, coldstart=冷启动, evalopt=生成评估器+优化器, iteration=逐轮迭代, summary=汇总报告")
     p_ac.add_argument("--dataset", default="ACEBench", help="数据集名称 (默认 ACEBench)")
     p_ac.add_argument("--ratio", type=float, default=0.05, help="冷启动抽样比例 (默认 0.05)")
     p_ac.add_argument("--rounds", type=int, default=10, help="迭代轮数 (默认 10)")
@@ -82,6 +83,7 @@ def main():
     p_ac.add_argument("--model", default="Qwen/Qwen2.5-14B-Instruct", help="模型名称")
     p_ac.add_argument("--api-key", default="", help="SiliconFlow API Key")
     p_ac.add_argument("--output-dir", default="./results/no_gepa", help="结果输出目录")
+    p_ac.add_argument("--coldstart-results", default="", help="Phase 2/3/4 时指定冷启动结果路径 (默认自动查找)")
 
     args = parser.parse_args()
 
@@ -111,6 +113,12 @@ def main():
         import os
         if args.api_key:
             os.environ["SILICONFLOW_API_KEY"] = args.api_key
+        os.environ["ACEBENCH_PHASE"] = args.phase
+        os.environ["ACEBENCH_ROUNDS"] = str(args.rounds)
+        os.environ["ACEBENCH_ITER_RATIO"] = str(args.iter_ratio)
+        os.environ["ACEBENCH_OUTPUT_DIR"] = args.output_dir
+        if args.coldstart_results:
+            os.environ["ACEBENCH_COLDSTART_RESULTS"] = args.coldstart_results
         # 导入并执行
         import runpy
         script_path = Path(__file__).parent / "run_acebench_pipeline_no_gepa.py"
