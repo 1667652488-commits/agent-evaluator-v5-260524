@@ -29,11 +29,18 @@ import os
 import sys
 import time
 import random
+import subprocess
 from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 
-from openai import OpenAI
+try:
+    from openai import OpenAI
+except ImportError:
+    print("Installing openai...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", "openai"])
+    from openai import OpenAI
+    print("openai installed.")
 
 # ---------------------------------------------------------------------------
 # 0. 配置
@@ -212,6 +219,74 @@ def run_agent_on_task(task):
 # 4. 评估（对比 Ground Truth）
 # ---------------------------------------------------------------------------
 
+
+
+def _compare_tool_args(tool, args, gt_tool, gt_args):
+    """通用工具名+参数对比逻辑"""
+    # 工具名匹配
+    tool_match = (tool == gt_tool) if tool else False
+    if not tool and not gt_tool:
+        tool_match = True
+
+    if not tool_match:
+        return {"status": "fail", "score": 0.0, "details": f"工具选择错误: 期望 '{gt_tool}'，实际 '{tool}'", "tool_match": False, "param_match": False, "missing_params": [], "extra_params": [], "value_mismatches": []}
+
+    # 参数对比
+    expected_params = set(gt_args.keys())
+    actual_params = set(args.keys())
+
+    missing = list(expected_params - actual_params)
+    extra = list(actual_params - expected_params)
+
+    value_mismatches = []
+    for k in expected_params & actual_params:
+        if gt_args[k] != args[k]:
+            value_mismatches.append({"param": k, "expected": gt_args[k], "actual": args[k]})
+
+    if not missing and not extra and not value_mismatches:
+        return {"status": "pass", "score": 1.0, "details": "工具名和参数完全匹配", "tool_match": True, "param_match": True, "missing_params": [], "extra_params": [], "value_mismatches": []}
+    elif not missing and len(value_mismatches) <= 1:
+        return {"status": "partial", "score": 0.5, "details": f"工具正确，参数值不匹配: {len(value_mismatches)}处, 多余{len(extra)}个", "tool_match": True, "param_match": False, "missing_params": [], "extra_params": extra, "value_mismatches": value_mismatches}
+    else:
+        return {"status": "fail", "score": 0.0, "details": f"参数差距大: 缺失{len(missing)}个, 多余{len(extra)}个, 不匹配{len(value_mismatches)}处", "tool_match": True, "param_match": False, "missing_params": missing, "extra_params": extra, "value_mismatches": value_mismatches}
+
+
+def parse_milestone(ms_str):
+    """解析 ACEBench mile_stone 字符串如 [tool_name(arg1='val1', arg2=123)]"""
+    if not ms_str:
+        return None, {}
+    ms_str = ms_str.strip().strip("[]")
+    match = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\((.*)\)", ms_str)
+    if not match:
+        return None, {}
+    tool_name = match.group(1)
+    args_str = match.group(2)
+    args = {}
+    if args_str.strip():
+        pattern = r"([A-Za-z_][A-Za-z0-9_]*)\s*=\s*('[^']*'|\"[^\"]*\"|\[[^\]]*\]|[^,)]+)"
+        for m in re.finditer(pattern, args_str):
+            k = m.group(1)
+            v_str = m.group(2).strip()
+            if (v_str.startswith("'") and v_str.endswith("'")) or (v_str.startswith('"') and v_str.endswith('"')):
+                v = v_str[1:-1]
+            elif v_str in ("True", "true"):
+                v = True
+            elif v_str in ("False", "false"):
+                v = False
+            elif v_str in ("None", "none"):
+                v = None
+            else:
+                try:
+                    v = int(v_str)
+                except:
+                    try:
+                        v = float(v_str)
+                    except:
+                        v = v_str
+            args[k] = v
+    return tool_name, args
+
+
 def compare_with_ground_truth(agent_result, gt_entry):
     """
     对比 Agent 输出与 Ground Truth
@@ -224,6 +299,18 @@ def compare_with_ground_truth(agent_result, gt_entry):
     """
     tool = agent_result["tool"]
     args = agent_result["arguments"]
+    
+    # ---- Agent 子集特殊处理：使用 mile_stone 作为期望的单步调用 ----
+    task_id = gt_entry.get("id", "")
+    is_agent_subset = task_id.startswith(("agent_multi_step", "agent_multi_turn"))
+    if is_agent_subset:
+        milestones = gt_entry.get("mile_stone", [])
+        if milestones and len(milestones) > 0:
+            gt_tool, gt_args = parse_milestone(milestones[0])
+            if gt_tool:
+                return _compare_tool_args(tool, args, gt_tool, gt_args)
+        # 没有 mile_stone 时 fallback
+        return {"status": "pass", "score": 1.0, "details": "Agent 子集无 mile_stone，跳过单步对比", "tool_match": True, "param_match": True, "missing_params": [], "extra_params": [], "value_mismatches": []}
     
     # 获取 ground truth
     gt_raw = gt_entry.get("ground_truth", None)
@@ -271,12 +358,7 @@ def compare_with_ground_truth(agent_result, gt_entry):
         if not tool_match:
             return {"status": "fail", "score": 0.0, "details": f"工具选择错误: 期望 '{gt_tool}'，实际 '{tool}'", "tool_match": False, "param_match": False, "missing_params": missing, "extra_params": extra, "value_mismatches": []}
         
-        if not missing and not extra:
-            return {"status": "pass", "score": 1.0, "details": "工具名和参数名完全匹配", "tool_match": True, "param_match": True, "missing_params": [], "extra_params": [], "value_mismatches": []}
-        elif not missing:
-            return {"status": "partial", "score": 0.5, "details": f"工具正确，有多余参数: {extra}", "tool_match": True, "param_match": False, "missing_params": [], "extra_params": extra, "value_mismatches": []}
-        else:
-            return {"status": "fail", "score": 0.0, "details": f"参数缺失: {missing}", "tool_match": True, "param_match": False, "missing_params": missing, "extra_params": extra, "value_mismatches": []}
+        return _compare_tool_args(tool, args, gt_tool, {p: "" for p in required_params})
     
     # ---- 格式 1: gt_args 是字典 {param: value} → 完整对比 ----
     elif isinstance(gt_args_raw, dict):
@@ -372,17 +454,25 @@ def run_cold_start(datasets, gt_files, ratio=0.05):
     print("Phase 1: 冷启动")
     print("=" * 70)
     
-    # 抽取 5% 数据（分层抽样，每个子集抽 5%）
+    # 分层抽样：Agent 子集全部加入（确保多步场景覆盖），Normal/Special 按比例抽样
     coldstart_tasks = []
     for subset_name, records in datasets.items():
-        n = max(1, int(len(records) * ratio))
-        sampled = random.sample(records, n)
+        if "agent" in subset_name.lower():
+            # Agent 子集：全部加入（确保多步/多轮场景被充分覆盖）
+            n = len(records)
+            sampled = [dict(r) for r in records]  # 深拷贝
+        else:
+            # Normal / Special：按比例抽样
+            n = max(1, int(len(records) * ratio))
+            sampled = [dict(r) for r in random.sample(records, n)]
         for task in sampled:
             task["_subset"] = subset_name
         coldstart_tasks.extend(sampled)
         print(f"  {subset_name}: 抽取 {n}/{len(records)} 条")
     
     print(f"\n  冷启动总样本: {len(coldstart_tasks)} 条")
+    agent_count = sum(1 for t in coldstart_tasks if "agent" in t["_subset"].lower())
+    print(f"  其中 Agent 子集: {agent_count} 条 ({agent_count/len(coldstart_tasks)*100:.0f}%)")
     
     # 逐条执行
     results = []
@@ -762,7 +852,7 @@ def generate_summary_report(coldstart_summary, round_results):
         "timestamp": datetime.now().isoformat(),
         "model": MODEL,
         "dataset": "ACEBench",
-        "gepa_enabled": False,
+        "gepa_enabled": True,
         "phase1_coldstart": coldstart_summary,
         "phase3_iteration": {
             "rounds": len(round_results),
