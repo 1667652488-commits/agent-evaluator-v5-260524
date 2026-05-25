@@ -4,7 +4,7 @@
   "env": "linux",
   "datasets": {
     "default": "agentboard",
-    "available": ["agentboard", "superclue", "general-functioncall-test"],
+    "available": ["agentboard", "superclue", "general-functioncall-test", "acebench"],
     "agentboard": {
       "data_dir": "data_preprocessing/raw_datasets/agentboard",
       "description": "AgentBoard: 345条多维度Agent评测数据"
@@ -19,6 +19,20 @@
       "metrics": ["tool_call_f1", "schema_accuracy", "count_finish_reason_tool_call", "count_successful_tool_call"],
       "language": "zh/en",
       "source": "evalscope/GeneralFunctionCall-Test (ModelScope)"
+    },
+    "acebench": {
+      "data_dir": "data_preprocessing/raw_datasets/ACEBench/data_zh",
+      "description": "ACEBench: 中文 Function Calling 评测数据（USTC+华为诺亚方舟），1017条，含Agent多步/多轮子集",
+      "language": "zh",
+      "source": "https://github.com/ACEBench/ACEBench",
+      "subsets": {
+        "agent_multi_step": "data_preprocessing/raw_datasets/ACEBench/data_zh/data_agent_multi_step.json",
+        "agent_multi_turn": "data_preprocessing/raw_datasets/ACEBench/data_zh/data_agent_multi_turn.json",
+        "normal": "data_preprocessing/raw_datasets/ACEBench/data_zh/data_normal_*.json",
+        "special": "data_preprocessing/raw_datasets/ACEBench/data_zh/data_special_*.json"
+      },
+      "ground_truth": "data_preprocessing/raw_datasets/ACEBench/data_zh/possible_answer",
+      "metrics": ["process_accuracy", "end_to_end_accuracy", "tool_call_f1", "schema_accuracy"]
     }
   },
   "paths": {
