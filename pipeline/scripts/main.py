@@ -72,6 +72,17 @@ def main():
     po.add_argument("--population", type=int, default=6)
     po.add_argument("--api-key", default="")
 
+# --- acebench (ACEBench cold-start + iteration pipeline) ---
+    p_ac = sub.add_parser("acebench", help="ACEBench 飞轮: 冷启动→评估器→优化器→逐轮迭代")
+    p_ac.add_argument("--dataset", default="ACEBench", help="数据集名称 (默认 ACEBench)")
+    p_ac.add_argument("--ratio", type=float, default=0.05, help="冷启动抽样比例 (默认 0.05)")
+    p_ac.add_argument("--rounds", type=int, default=10, help="迭代轮数 (默认 10)")
+    p_ac.add_argument("--iter-ratio", type=float, default=0.10, help="每轮迭代抽样比例 (默认 0.10)")
+    p_ac.add_argument("--gepa", action="store_true", help="开启 GEPA (默认关闭)")
+    p_ac.add_argument("--model", default="Qwen/Qwen2.5-14B-Instruct", help="模型名称")
+    p_ac.add_argument("--api-key", default="", help="SiliconFlow API Key")
+    p_ac.add_argument("--output-dir", default="./results/no_gepa", help="结果输出目录")
+
     args = parser.parse_args()
 
     if args.cmd == "phase1":
@@ -95,6 +106,15 @@ def main():
     elif args.cmd == "optimize":
         from optimizer.dev.scripts.gepa_optimizer import main as _main
         _main()
+    elif args.cmd == "acebench":
+        # 设置环境变量并调用 ACEBench 飞轮脚本
+        import os
+        if args.api_key:
+            os.environ["SILICONFLOW_API_KEY"] = args.api_key
+        # 导入并执行
+        import runpy
+        script_path = Path(__file__).parent / "run_acebench_pipeline_no_gepa.py"
+        runpy.run_path(str(script_path), run_name="__main__")
     else:
         parser.print_help()
 
