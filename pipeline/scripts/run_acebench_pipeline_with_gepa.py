@@ -750,7 +750,63 @@ def run_iteration(datasets, gt_files, optimized_prompt, rounds=4, ratio=0.25):
         
         print(f"    本轮结果: 通过 {pass_count}/{total} ({round_summary['pass_rate']:.1%}) | 均分: {round_summary['avg_score']:.2f}")
         
-        # 保存本轮结果 + 当前使用的 prompt
+        # --- 每轮结束后：分析失败模式，更新 prompt ---
+        print(f"\n    [优化器] 分析本轮失败模式并生成 prompt 补丁...")
+        
+        # 1. 分析各维度失败
+        dim_failures = defaultdict(list)
+        for detail in round_details:
+            if detail["status"] in ["partial", "fail"]:
+                for dim, score in detail.get("dimensions", {}).items():
+                    if score < 0.5:
+                        dim_failures[dim].append({"task_id": detail["task_id"], "score": score})
+        
+        if dim_failures:
+            print(f"      检测到弱项维度:")
+            for dim, failures in sorted(dim_failures.items(), key=lambda x: -len(x[1])):
+                print(f"        {dim}: {len(failures)} 条样本低于 0.5")
+        else:
+            print(f"      本轮无显著弱项，保持当前 prompt")
+        
+        # 2. 生成针对性补丁
+        new_patches = []
+        if "tool_selection" in dim_failures:
+            new_patches.append("[工具选择] 每步决策前，先列出所有可用工具及其功能，匹配用户当前需求的关键词，避免凭直觉选择。")
+        if "argument_generation" in dim_failures:
+            new_patches.append("[参数生成] 输出参数前，检查工具的 'required' 列表，确保无遗漏。参数值应从对话历史或上一步结果中提取。")
+        if "execution_order" in dim_failures:
+            new_patches.append("[执行顺序] 分析任务依赖：前置步骤（如登录、查询）必须先完成，再执行后续操作（如下单、预订）。")
+        if "state_tracking" in dim_failures:
+            new_patches.append("[状态跟踪] 每步执行后，简要回顾沙箱返回的状态变化，确认操作已生效（如余额扣减、订单创建）。")
+        if "termination_control" in dim_failures:
+            new_patches.append("[终止控制] 确认所有用户请求的子任务都已完成后再终止。如果仍有未完成的操作，继续执行下一步。")
+        
+        # 3. 合并补丁到 current_prompt（避免重复）
+        if new_patches:
+            # 检查是否已存在相同补丁
+            existing_text = current_prompt
+            patches_added = 0
+            for patch in new_patches:
+                # 提取补丁核心关键词
+                patch_key = patch.split("]")[0] + "]" if "]" in patch else patch[:20]
+                if patch_key not in existing_text:
+                    current_prompt += f"\n\n## {patch}"
+                    patches_added += 1
+            
+            if patches_added > 0:
+                print(f"      新增 {patches_added} 个补丁，prompt 长度: {len(current_prompt)} 字符")
+            else:
+                print(f"      补丁已存在，未重复添加")
+        
+        # 4. 回归检查：如果本轮通过率下降超过阈值，打印警告
+        if round_idx > 1 and round_results:
+            prev_rate = round_results[-1]["pass_rate"]
+            curr_rate = round_summary["pass_rate"]
+            delta = curr_rate - prev_rate
+            if delta < -0.15:
+                print(f"      ⚠️ 回归警告: 通过率下降 {abs(delta):.1%}，建议检查补丁效果")
+        
+        # 保存本轮结果 + 更新后的 prompt
         round_dir = RESULTS_DIR / "phase3_iteration" / f"round_{round_idx}"
         round_dir.mkdir(parents=True, exist_ok=True)
         with open(round_dir / "details.json", "w", encoding="utf-8") as f:
