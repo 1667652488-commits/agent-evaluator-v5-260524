@@ -82,35 +82,23 @@ def load_jsonl(path):
 
 
 def load_all_datasets():
-    """加载 ACEBench 所有 Normal + Special + Agent 子集"""
+    """仅加载 ACEBench Agent 子集（multi_step + multi_turn）"""
     datasets = {}
     
-    # Normal 子集
-    for f in sorted(DATA_DIR.glob("data_normal_*.json")):
-        name = f.stem
-        datasets[name] = load_jsonl(f)
-        print(f"  加载 {name}: {len(datasets[name])} 条")
-    
-    # Special 子集
-    for f in sorted(DATA_DIR.glob("data_special_*.json")):
-        name = f.stem
-        datasets[name] = load_jsonl(f)
-        print(f"  加载 {name}: {len(datasets[name])} 条")
-    
-    # Agent 子集
+    # 仅加载 Agent 子集
     for f in sorted(DATA_DIR.glob("data_agent_*.json")):
         name = f.stem
         datasets[name] = load_jsonl(f)
         print(f"  加载 {name}: {len(datasets[name])} 条")
     
-    # 加载 ground truth
+    # 加载 ground truth（仅 Agent 子集）
     gt_files = {}
-    for f in sorted(GT_DIR.glob("*.json")):
+    for f in sorted(GT_DIR.glob("data_agent_*.json")):
         name = f.stem
         gt_files[name] = {gt["id"]: gt for gt in load_jsonl(f)}
     
     total = sum(len(v) for v in datasets.values())
-    print(f"\n总计: {total} 条")
+    print(f"\n总计 (仅 Agent 子集): {total} 条")
     return datasets, gt_files
 
 
@@ -454,25 +442,27 @@ def run_cold_start(datasets, gt_files, ratio=0.05):
     print("Phase 1: 冷启动")
     print("=" * 70)
     
-    # 分层抽样：Agent 子集全部加入（确保多步场景覆盖），Normal/Special 按比例抽样
+    # 分层抽样：Agent 子集冷启动 10 条
+    # multi_step (20条) 抽 4 条，multi_turn (30条) 抽 6 条
     coldstart_tasks = []
     for subset_name, records in datasets.items():
-        if "agent" in subset_name.lower():
-            # Agent 子集：全部加入（确保多步/多轮场景被充分覆盖）
-            n = len(records)
-            sampled = [dict(r) for r in records]  # 深拷贝
+        if "multi_step" in subset_name:
+            n = min(4, len(records))
+        elif "multi_turn" in subset_name:
+            n = min(6, len(records))
         else:
-            # Normal / Special：按比例抽样
-            n = max(1, int(len(records) * ratio))
+            n = 0
+        if n > 0:
             sampled = [dict(r) for r in random.sample(records, n)]
-        for task in sampled:
-            task["_subset"] = subset_name
-        coldstart_tasks.extend(sampled)
-        print(f"  {subset_name}: 抽取 {n}/{len(records)} 条")
+            for task in sampled:
+                task["_subset"] = subset_name
+            coldstart_tasks.extend(sampled)
+            print(f"  {subset_name}: 抽取 {n}/{len(records)} 条")
     
     print(f"\n  冷启动总样本: {len(coldstart_tasks)} 条")
-    agent_count = sum(1 for t in coldstart_tasks if "agent" in t["_subset"].lower())
-    print(f"  其中 Agent 子集: {agent_count} 条 ({agent_count/len(coldstart_tasks)*100:.0f}%)")
+    ms_count = sum(1 for t in coldstart_tasks if "multi_step" in t["_subset"])
+    mt_count = sum(1 for t in coldstart_tasks if "multi_turn" in t["_subset"])
+    print(f"  其中 multi_step: {ms_count} 条, multi_turn: {mt_count} 条")
     
     # 逐条执行
     results = []
@@ -713,11 +703,10 @@ def generate_evaluator(coldstart_results, summary):
 # 8. Phase 3: 逐轮迭代
 # ---------------------------------------------------------------------------
 
-def run_iteration(datasets, gt_files, optimized_prompt, rounds=10, ratio=0.10):
+def run_iteration(datasets, gt_files, optimized_prompt, rounds=4, ratio=0.25):
     """
-    逐轮迭代飞轮
-    每轮: 用当前 prompt 跑优化集 → 评估 → 生成新补丁 → 更新 prompt
-    然后: 用新 prompt 跑测试集 → 记录通过率
+    逐轮迭代飞轮（Agent 子集专用）
+    40 条数据分 4 轮，每轮 10 条
     """
     print("\n" + "=" * 70)
     print(f"Phase 3: 逐轮迭代 ({rounds} 轮 × {ratio:.0%})")
@@ -1003,7 +992,7 @@ def main():
         evaluator_config, optimizer_config, optimized_prompt = generate_evaluator(coldstart_results, coldstart_summary)
         
         # Phase 3: 逐轮迭代
-        round_results = run_iteration(datasets, gt_files, optimized_prompt, rounds=rounds, ratio=iter_ratio)
+        round_results = run_iteration(datasets, gt_files, optimized_prompt, rounds=4, ratio=0.25)
         
         # Phase 4: 汇总
         report = generate_summary_report(coldstart_summary, round_results)
