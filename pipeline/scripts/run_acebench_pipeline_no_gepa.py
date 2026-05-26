@@ -113,8 +113,8 @@ def load_all_datasets():
 # 2. LLM 调用
 # ---------------------------------------------------------------------------
 
-def call_llm(system_prompt, user_prompt, max_tokens=512, temperature=0.1):
-    """调用 SiliconFlow LLM"""
+def call_llm(system_prompt, user_prompt, max_tokens=512, temperature=0.1, timeout=60):
+    """调用 SiliconFlow LLM，带超时保护"""
     try:
         response = client.chat.completions.create(
             model=MODEL,
@@ -123,7 +123,8 @@ def call_llm(system_prompt, user_prompt, max_tokens=512, temperature=0.1):
                 {"role": "user", "content": user_prompt}
             ],
             max_tokens=max_tokens,
-            temperature=temperature
+            temperature=temperature,
+            timeout=timeout
         )
         return response.choices[0].message.content
     except Exception as e:
