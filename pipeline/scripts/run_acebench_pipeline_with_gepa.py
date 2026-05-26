@@ -750,13 +750,15 @@ def run_iteration(datasets, gt_files, optimized_prompt, rounds=4, ratio=0.25):
         
         print(f"    本轮结果: 通过 {pass_count}/{total} ({round_summary['pass_rate']:.1%}) | 均分: {round_summary['avg_score']:.2f}")
         
-        # 保存
+        # 保存本轮结果 + 当前使用的 prompt
         round_dir = RESULTS_DIR / "phase3_iteration" / f"round_{round_idx}"
         round_dir.mkdir(parents=True, exist_ok=True)
         with open(round_dir / "details.json", "w", encoding="utf-8") as f:
             json.dump(round_details, f, ensure_ascii=False, indent=2)
         with open(round_dir / "summary.json", "w", encoding="utf-8") as f:
             json.dump(round_summary, f, ensure_ascii=False, indent=2)
+        with open(round_dir / "updated_prompt.txt", "w", encoding="utf-8") as f:
+            f.write(current_prompt)
         
         round_results.append(round_summary)
     
