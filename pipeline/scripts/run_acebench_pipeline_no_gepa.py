@@ -1,45 +1,28 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ACEBench 飞轮执行脚本（多步沙箱版，不开启 GEPA）
+ACEBench 飞轮执行脚本（多步沙箱版，开启 GEPA）
 ========================================================
 
-集成 ACEBench 沙箱模拟器，执行多步 ReAct 循环，记录完整轨迹。
+集成 ACEBench 沙箱模拟器 + GEPA 进化优化，执行多步 ReAct 循环。
+
+与 no_gepa 版本的区别:
+    - 优化器使用 GEPA 进化策略（3代 × 5种群 × 2精英）
+    - 每轮迭代后通过 ReflectionEngine + MutationEngine + ParetoSelector 生成新 prompt
+    - 保留不导致退化的个体，淘汰负向补丁
 
 数据范围:
     仅 Agent 子集（multi_step 20条 + multi_turn 30条 = 50条）
 
 执行流程:
     Phase 1: 冷启动（10条分层抽样）→ 多步沙箱执行 → 5维评估
-    Phase 2: 基于冷启动结果生成评估器 + 基础优化器（规则补丁）
-    Phase 3: 逐轮迭代（4轮 × 10条）→ 每轮用新 prompt 跑 → 记录通过率
+    Phase 2: 基于冷启动结果生成 5维评估器 + GEPA 优化器
+    Phase 3: 逐轮迭代（4轮 × 10条）→ GEPA 进化优化 → 记录通过率
     Phase 4: 汇总报告
 
 运行方式:
     export SILICONFLOW_API_KEY=sk-xxx
-    python pipeline/scripts/run_acebench_pipeline_no_gepa.py
-
-输出字段（每条样本）:
-    task_id, question,
-    steps: [
-        {step_id, thoughts, tool_calls: {tool, arguments},
-         observations, latency_ms, tokens: {prompt, completion},
-         state_before, state_after}
-    ],
-    final_state, ground_truth,
-    outcome: pass/partial/fail, outcome_reason
-
-输出目录:
-    results/no_gepa/
-        ├── phase1_coldstart/          # 冷启动轨迹 + 评估
-        ├── phase2_evaluator/          # 5维评估器配置
-        ├── phase2_optimizer/          # 基础优化器 + 优化后 prompt
-        ├── phase3_iteration/          # 逐轮结果
-        │   ├── round_1/
-        │   ├── round_2/
-        │   ├── round_3/
-        │   └── round_4/
-        └── summary_report.json        # 汇总报告
+    python pipeline/scripts/run_acebench_pipeline_with_gepa.py
 """
 
 import json
@@ -143,7 +126,7 @@ def call_llm(system_prompt, user_prompt, max_tokens=512, temperature=0.1, timeou
 # 4. Agent 多步沙箱执行
 # ---------------------------------------------------------------------------
 
-def run_agent_with_sandbox(task, gt_files, system_prompt="", max_steps=8):
+def run_agent_with_sandbox(task, system_prompt="", max_steps=8):
     """
     使用沙箱执行多步 Agent
     
@@ -440,7 +423,7 @@ def run_cold_start(datasets, gt_files, ratio=0.05):
         print(f"    Question: {task['question'][:60]}...")
         
         # 多步沙箱执行
-        result = run_agent_with_sandbox(task, gt_files, max_steps=8)
+        result = run_agent_with_sandbox(task, max_steps=8)
         
         # 5维评估
         gt_entry = task.get("_ground_truth", {})
@@ -711,7 +694,7 @@ def run_iteration(datasets, gt_files, optimized_prompt, rounds=4, ratio=0.25):
             subset = task["_subset"]
             
             # 使用优化后的 prompt 运行 Agent
-            result = run_agent_with_sandbox(task, gt_files, system_prompt=current_prompt, max_steps=8)
+            result = run_agent_with_sandbox(task, system_prompt=current_prompt, max_steps=8)
             
             # 评估
             gt_entry = task.get("_ground_truth", {})
