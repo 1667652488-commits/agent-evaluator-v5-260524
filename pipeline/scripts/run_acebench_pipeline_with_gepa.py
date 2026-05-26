@@ -82,7 +82,7 @@ random.seed(42)
 # 1. 导入沙箱 Runner
 # ---------------------------------------------------------------------------
 sys.path.insert(0, str(PROJECT_ROOT))
-from agent.sandbox.sandbox_runner import ACEBenchSandboxRunner
+from agent.sandbox.sandbox_runner import ACEBenchSandboxRunner, acebench_to_json
 
 # ---------------------------------------------------------------------------
 # 2. 数据加载
@@ -143,7 +143,7 @@ def call_llm(system_prompt, user_prompt, max_tokens=512, temperature=0.1, timeou
 # 4. Agent 多步沙箱执行
 # ---------------------------------------------------------------------------
 
-def run_agent_with_sandbox(task, system_prompt="", max_steps=8):
+def run_agent_with_sandbox(task, gt_files, system_prompt="", max_steps=8):
     """
     使用沙箱执行多步 Agent
     
@@ -440,7 +440,7 @@ def run_cold_start(datasets, gt_files, ratio=0.05):
         print(f"    Question: {task['question'][:60]}...")
         
         # 多步沙箱执行
-        result = run_agent_with_sandbox(task, max_steps=8)
+        result = run_agent_with_sandbox(task, gt_files, max_steps=8)
         
         # 5维评估
         gt_entry = task.get("_ground_truth", {})
@@ -711,7 +711,7 @@ def run_iteration(datasets, gt_files, optimized_prompt, rounds=4, ratio=0.25):
             subset = task["_subset"]
             
             # 使用优化后的 prompt 运行 Agent
-            result = run_agent_with_sandbox(task, system_prompt=current_prompt, max_steps=8)
+            result = run_agent_with_sandbox(task, gt_files, system_prompt=current_prompt, max_steps=8)
             
             # 评估
             gt_entry = task.get("_ground_truth", {})
