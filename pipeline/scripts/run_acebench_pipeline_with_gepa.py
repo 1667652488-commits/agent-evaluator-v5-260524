@@ -29,18 +29,13 @@ import os
 import sys
 import time
 import random
+import re
 import subprocess
 from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 
-try:
-    from openai import OpenAI
-except ImportError:
-    print("Installing openai...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", "openai"])
-    from openai import OpenAI
-    print("openai installed.")
+from openai import OpenAI
 
 # ---------------------------------------------------------------------------
 # 0. 配置
@@ -306,9 +301,19 @@ def compare_with_ground_truth(agent_result, gt_entry):
     if is_agent_subset:
         milestones = gt_entry.get("mile_stone", [])
         if milestones and len(milestones) > 0:
-            gt_tool, gt_args = parse_milestone(milestones[0])
-            if gt_tool:
-                return _compare_tool_args(tool, args, gt_tool, gt_args)
+            # mile_stone 可能是 list[str] 或 list[list[str]]（多条可能路径）
+            first = milestones[0]
+            if isinstance(first, list) and len(first) > 0:
+                # 取第一条路径的第一步
+                ms_str = first[0]
+            elif isinstance(first, str):
+                ms_str = first
+            else:
+                ms_str = None
+            if ms_str:
+                gt_tool, gt_args = parse_milestone(ms_str)
+                if gt_tool:
+                    return _compare_tool_args(tool, args, gt_tool, gt_args)
         # 没有 mile_stone 时 fallback
         return {"status": "pass", "score": 1.0, "details": "Agent 子集无 mile_stone，跳过单步对比", "tool_match": True, "param_match": True, "missing_params": [], "extra_params": [], "value_mismatches": []}
     
