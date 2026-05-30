@@ -85,13 +85,48 @@ class ACEBenchSandbox:
                 self.food_platform_state["logged_in_users"].append(user)
     
     def _init_message_state(self):
-        """初始化 MessageApi 状态"""
+        """初始化 MessageApi 状态 — 预置 ACEBench 标准短信记录"""
         self.message_state = {
-            "inbox": {},
-            "next_message_id": 1,
+            "inbox": {
+                "1": {
+                    "sender_id": "USR100",
+                    "receiver_id": "USR101",
+                    "message": "Hey Frank, don't forget about our meeting on 2024-06-11 at 4 PM in Conference Room 1.",
+                    "time": "2024-06-09",
+                },
+                "2": {
+                    "sender_id": "USR101",
+                    "receiver_id": "USR102",
+                    "message": '你能帮我点一个"玛格丽特披萨"的外卖吗,商家是达美乐。',
+                    "time": "2024-03-09",
+                },
+                "3": {
+                    "sender_id": "USR102",
+                    "receiver_id": "USR103",
+                    "message": "帮我查一些喜茶有哪些奶茶外卖，买一杯便宜些的奶茶。买完以后记得回复我,回复的内容是（已经买好了）",
+                    "time": "2023-12-05",
+                },
+                "4": {
+                    "sender_id": "USR103",
+                    "receiver_id": "USR102",
+                    "message": "No problem Helen, I can assist you.",
+                    "time": "2024-09-09",
+                },
+                "5": {
+                    "sender_id": "USR104",
+                    "receiver_id": "USR105",
+                    "message": "Isaac, are you available for a call?",
+                    "time": "2024-06-06",
+                },
+                "6": {
+                    "sender_id": "USR105",
+                    "receiver_id": "USR104",
+                    "message": "Yes Jack, let's do it in 30 minutes.",
+                    "time": "2024-01-15",
+                },
+            },
+            "next_message_id": 7,
         }
-        # 预置一些系统消息（从常见 ground_truth 模式）
-        # 实际运行时，如果有 ground_truth 传入，会覆盖
     
     def _init_reminder_state(self):
         """初始化 ReminderApi 状态"""
@@ -185,23 +220,28 @@ class ACEBenchSandbox:
         # 模拟商家商品列表
         menus = {
             "达美乐": [
+                {"product": "玛格丽特披萨", "price": 68.0},
                 {"product": "超级至尊披萨", "price": 88.0},
-                {"product": "玛格丽特披萨", "price": 65.0},
-            ],
-            "九田家烤肉": [
-                {"product": "烤五花肉", "price": 78.0},
-                {"product": "烤牛肉", "price": 88.0},
             ],
             "米村拌饭": [
                 {"product": "石锅拌饭", "price": 35.0},
                 {"product": "韩式牛肉拌饭", "price": 45.0},
             ],
+            "海底捞": [
+                {"product": "牛肉卷", "price": 68.0},
+                {"product": "海鲜拼盘", "price": 88.0},
+            ],
             "喜茶": [
+                {"product": "芝士奶茶", "price": 25.0},
                 {"product": "四季春奶茶", "price": 22.0},
-                {"product": "芝芝莓莓", "price": 28.0},
             ],
             "盒马生鲜": [
+                {"product": "有机蔬菜包", "price": 15.0},
                 {"product": "生鲜大礼包", "price": 99.0},
+            ],
+            "九田家烤肉": [
+                {"product": "韩式烤牛肉", "price": 128.0},
+                {"product": "烤五花肉", "price": 78.0},
             ],
         }
         products = menus.get(merchant_name, [])
@@ -216,11 +256,12 @@ class ACEBenchSandbox:
         
         # 计算总价
         menus = {
-            "达美乐": {"超级至尊披萨": 88.0, "玛格丽特披萨": 65.0},
-            "九田家烤肉": {"烤五花肉": 78.0, "烤牛肉": 88.0},
+            "达美乐": {"玛格丽特披萨": 68.0, "超级至尊披萨": 88.0},
             "米村拌饭": {"石锅拌饭": 35.0, "韩式牛肉拌饭": 45.0},
-            "喜茶": {"四季春奶茶": 22.0, "芝芝莓莓": 28.0},
-            "盒马生鲜": {"生鲜大礼包": 99.0},
+            "海底捞": {"牛肉卷": 68.0, "海鲜拼盘": 88.0},
+            "喜茶": {"芝士奶茶": 25.0, "四季春奶茶": 22.0},
+            "盒马生鲜": {"有机蔬菜包": 15.0, "生鲜大礼包": 99.0},
+            "九田家烤肉": {"韩式烤牛肉": 128.0, "烤五花肉": 78.0},
         }
         merchant_menu = menus.get(merchant_name, {})
         total = 0.0
